@@ -1,6 +1,6 @@
 # Murli Integration Guide: Go with urfave/cli v3
 
-This guide explains how to systematically integrate the **Murli CLI middleware** (`github.com/allank/murli`) into a Go application built with the **urfave/cli/v3** CLI framework.
+This guide explains how to systematically integrate the **Murli CLI middleware** (`github.com/murli-cli/murli-go`) into a Go application built with the **urfave/cli/v3** CLI framework.
 
 ---
 

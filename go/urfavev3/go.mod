@@ -9,3 +9,5 @@ require (
 )
 
 replace murli-work-shared => ../shared
+
+replace github.com/allank/murli => github.com/murli-cli/murli-go v1.0.2
