@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/allank/murli"
-	murliCobra "github.com/allank/murli/cobra"
+	"github.com/murli-cli/murli-go"
+	murliCobra "github.com/murli-cli/murli-go/cobra"
 	"github.com/spf13/cobra"
 	"murli-work-shared"
 )

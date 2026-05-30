@@ -107,8 +107,8 @@ Add the Murli core and Cobra adapter to your imports in `main.go`:
 
 ```go
 import (
-	"github.com/allank/murli"
-	murliCobra "github.com/allank/murli/cobra"
+	"github.com/murli-cli/murli-go"
+	murliCobra "github.com/murli-cli/murli-go/cobra"
 )
 ```
 
