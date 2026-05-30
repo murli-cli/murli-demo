@@ -1,6 +1,6 @@
 # Murli Integration Guide: Go with Cobra
 
-This guide explains how to systematically integrate the **Murli CLI middleware** (`github.com/allank/murli`) into a Go application built with the popular **spf13/cobra** CLI framework.
+This guide explains how to systematically integrate the **Murli CLI middleware** (`github.com/murli-cli/murli-go`) into a Go application built with the popular **spf13/cobra** CLI framework.
 
 ---
 
