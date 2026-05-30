@@ -98,8 +98,8 @@ Add the Murli core and urfave/cli v2 adapter to your imports in `main.go`:
 
 ```go
 import (
-	"github.com/allank/murli"
-	murliCli "github.com/allank/murli/cli/v2"
+	"github.com/murli-cli/murli-go"
+	murliCli "github.com/murli-cli/murli-go/cli/v2"
 )
 ```
 

@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/allank/murli"
-	murliCli "github.com/allank/murli/cli/v2"
+	"github.com/murli-cli/murli-go"
+	murliCli "github.com/murli-cli/murli-go/cli/v2"
 	"github.com/urfave/cli/v2"
 	"murli-work-shared"
 )

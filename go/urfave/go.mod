@@ -3,7 +3,7 @@ module murli-work-urfave
 go 1.26.2
 
 require (
-	github.com/allank/murli v1.0.2
+	github.com/murli-cli/murli-go v1.0.2
 	github.com/urfave/cli/v2 v2.27.7
 	murli-work-shared v0.0.0
 )
@@ -15,5 +15,3 @@ require (
 )
 
 replace murli-work-shared => ../shared
-
-replace github.com/allank/murli => github.com/murli-cli/murli-go v1.0.2
