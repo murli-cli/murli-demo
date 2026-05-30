@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorkDatabase",
+  "description": "Database schema for the 'work' CLI tool",
+  "type": "object",
+  "properties": {
+    "tasks": {
+      "type": "array",
+      "description": "List of sprint tasks",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Auto-incremented unique task ID"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Title of the task"
+          },
+          "desc": {
+            "type": "string",
+            "default": "",
+            "description": "Description of the task"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["todo", "doing", "done"],
+            "default": "todo",
+            "description": "Current status of the task"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["low", "medium", "high"],
+            "description": "Task priority level"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "description": "List of associated labels"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO-8601 UTC timestamp when task was created"
+          }
+        },
+        "required": ["id", "title", "desc", "status", "priority", "labels", "created_at"],
+        "additionalProperties": false
+      }
+    },
+    "labels": {
+      "type": "array",
+      "description": "Global list of defined labels",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9-]+$",
+            "description": "Unique, lowercase slugified label name"
+          }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["tasks", "labels"],
+  "additionalProperties": false
+}

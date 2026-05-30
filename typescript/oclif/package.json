@@ -1,0 +1,33 @@
+{
+  "name": "work-oclif",
+  "version": "0.1.0",
+  "description": "work CLI using oclif",
+  "main": "dist/index.js",
+  "bin": {
+    "murli-work": "./bin/run.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "./bin/run.js"
+  },
+  "dependencies": {
+    "@oclif/core": "^3.0.0",
+    "cli-table3": "^0.6.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  },
+  "oclif": {
+    "bin": "murli-work",
+    "commands": "./dist/src/commands",
+    "topics": {
+      "task": {
+        "description": "Manage sprint tasks"
+      },
+      "label": {
+        "description": "Manage global task labels"
+      }
+    }
+  }
+}

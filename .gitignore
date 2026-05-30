@@ -1,0 +1,57 @@
+# ==============================================================================
+#                 MURLI-WORK REPOSITORY .GITIGNORE CONFIGURATION
+# ==============================================================================
+
+# OS & IDEs
+.DS_Store
+.vscode/
+.idea/
+.antigravitycli/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Unified build executables
+/bin/
+
+# Go build outputs
+go/cobra/murli-work-cobra
+go/urfave/murli-work-urfave
+*.exe
+*.test
+*.prof
+go/shared/murli-work-shared
+
+# Rust compilation target directories
+target/
+rust/clap/target/
+
+# Node.js / TypeScript outputs (recursive)
+node_modules/
+dist/
+typescript/commander/dist/
+typescript/yargs/dist/
+typescript/oclif/dist/
+typescript/oclif/node_modules/
+typescript/commander/node_modules/
+typescript/yargs/node_modules/
+typescript/commander/shared/
+typescript/yargs/shared/
+typescript/oclif/src/shared/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Python Virtual Environments & Pycaches
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

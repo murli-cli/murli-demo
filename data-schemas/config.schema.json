@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorkConfig",
+  "description": "User configuration for the 'work' CLI tool",
+  "type": "object",
+  "properties": {
+    "default_output": {
+      "type": "string",
+      "enum": ["table", "json", "csv"],
+      "default": "table",
+      "description": "The default output format for listing tasks"
+    },
+    "default_priority": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "default": "medium",
+      "description": "The default priority for new tasks"
+    }
+  },
+  "required": ["default_output", "default_priority"],
+  "additionalProperties": false
+}
