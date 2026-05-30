@@ -8,6 +8,20 @@ The target CLI application is named **`murli-work`** to prevent collisions with 
 
 ---
 
+## 🌿 Branch Strategy: Skeletons vs. Murli Integrations
+
+To keep the repository clean and allow developers to compare the "before" and "after" state of the CLI tools:
+
+1. **`main` Branch (Skeletons Only):**
+   - Contains only the clean, framework-specific reference implementations (the skeletons) without any Murli middleware.
+   - Ideal for starting a fresh integration or studying standard framework patterns.
+2. **Feature Branches (Murli Integrations):**
+   - The integration of **Murli CLI middleware** is managed on a dedicated feature branch for each language and library.
+   - **Branch Naming:** `<language>/<library>` (e.g., `go/cobra`, `go/urfavecliv2`, `go/urfavecliv3`).
+   - Each branch includes the fully wrapped application, a detailed integration guide (e.g., `GO-COBRA-GUIDE.md`), and committed terminal outputs showing TTY-awareness and agent modes in action.
+
+---
+
 ## 🎯 The Purpose: Consistent Murli Demonstrations
 
 Integrating CLI tools with AI agents usually requires different boilerplate, schema structures, and error formats depending on the language and parser used. 
