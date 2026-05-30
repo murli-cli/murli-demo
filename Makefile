@@ -71,7 +71,7 @@ install-deps:
 build-all: build-go build-rust-clap build-zig build-ts build-py
 	@echo "==> All builds complete. Executables available in ./bin/"
 
-build-go: build-go-cobra build-go-urfave
+build-go: build-go-cobra build-go-urfave build-go-urfavev3
 
 build-go-cobra:
 	@echo "==> Building Go Cobra..."
@@ -82,6 +82,11 @@ build-go-urfave:
 	@echo "==> Building Go urfave/cli..."
 	mkdir -p bin
 	cd go/urfave && go build -o ../../bin/murli-work-go-urfave .
+
+build-go-urfavev3:
+	@echo "==> Building Go urfave/cli v3..."
+	mkdir -p bin
+	cd go/urfavev3 && go build -o ../../bin/murli-work-go-urfavev3 .
 
 build-rust-clap:
 	@echo "==> Building Rust Clap..."
