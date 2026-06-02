@@ -5,8 +5,8 @@
 # build implementations into a shared ./bin/ directory, and run them.
 
 .PHONY: help install-deps build-all build-go build-go-cobra build-go-urfave \
-        build-rust-clap build-ts build-ts-commander build-ts-yargs build-ts-oclif \
-        setup-py-launchers run-go-cobra run-go-urfave run-rust-clap \
+        build-rust-clap build-zig build-ts build-ts-commander build-ts-yargs build-ts-oclif \
+        setup-py-launchers run-go-cobra run-go-urfave run-rust-clap run-zig \
         run-py-click run-py-typer run-py-argparse run-ts-commander \
         run-ts-yargs run-ts-oclif clean
 
@@ -21,11 +21,12 @@ help:
 	@echo "  make install-deps             - Install all dependencies (Go, Python, TypeScript)"
 	@echo ""
 	@echo "Build Targets (outputs to ./bin/):"
-	@echo "  make build-all                - Build all implementations (Go, Rust, TS)"
+	@echo "  make build-all                - Build all implementations (Go, Rust, TS, Zig)"
 	@echo "  make build-go                 - Build both Go implementations"
 	@echo "  make build-go-cobra           - Build Go Cobra implementation"
 	@echo "  make build-go-urfave          - Build Go urfave/cli implementation"
 	@echo "  make build-rust-clap          - Build Rust clap implementation"
+	@echo "  make build-zig                - Build Zig clap implementation"
 	@echo "  make build-ts                 - Build all TypeScript implementations"
 	@echo "  make build-ts-commander       - Build TypeScript commander implementation"
 	@echo "  make build-ts-yargs           - Build TypeScript yargs implementation"
@@ -36,6 +37,7 @@ help:
 	@echo "  make run-go-cobra"
 	@echo "  make run-go-urfave"
 	@echo "  make run-rust-clap"
+	@echo "  make run-zig"
 	@echo "  make run-py-click"
 	@echo "  make run-py-typer"
 	@echo "  make run-py-argparse"
@@ -66,7 +68,7 @@ install-deps:
 	@echo "==> Done!"
 
 # --- Unified Builds ---
-build-all: build-go build-rust-clap build-ts build-py
+build-all: build-go build-rust-clap build-zig build-ts build-py
 	@echo "==> All builds complete. Executables available in ./bin/"
 
 build-go: build-go-cobra build-go-urfave
@@ -86,6 +88,12 @@ build-rust-clap:
 	mkdir -p bin
 	cd rust/clap && cargo build --release
 	cp rust/clap/target/release/work-clap bin/murli-work-rust-clap
+
+build-zig:
+	@echo "==> Building Zig clap..."
+	mkdir -p bin
+	cd zig && zig build
+	cp zig/zig-out/bin/murli-work bin/murli-work-zig
 
 build-ts: build-ts-commander build-ts-yargs build-ts-oclif
 
@@ -143,6 +151,9 @@ run-go-urfave: build-go-urfave
 run-rust-clap: build-rust-clap
 	@./bin/murli-work-rust-clap $(CMD)
 
+run-zig: build-zig
+	@./bin/murli-work-zig $(CMD)
+
 run-py-click: build-py
 	@./bin/murli-work-py-click $(CMD)
 
@@ -166,6 +177,7 @@ clean:
 	@echo "==> Cleaning up bin/, venv, and compilation outputs..."
 	rm -rf bin .venv
 	rm -rf rust/clap/target
+	rm -rf zig/zig-out zig/.zig-cache
 	rm -rf typescript/commander/dist typescript/commander/node_modules typescript/commander/shared
 	rm -rf typescript/yargs/dist typescript/yargs/node_modules typescript/yargs/shared
 	rm -rf typescript/oclif/dist typescript/oclif/node_modules typescript/oclif/src/shared

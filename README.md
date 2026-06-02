@@ -1,6 +1,4 @@
-# Multi-Language CLI Templates: Demonstrating Murli Integration
-
-This repository serves as a unified blueprint to demonstrate the application of the **Murli CLI middleware** on top of standardized reference implementations across **four programming languages** and **eight distinct CLI frameworks**.
+This repository serves as a unified blueprint to demonstrate the application of the **Murli CLI middleware** on top of standardized reference implementations across **five programming languages** and **nine distinct CLI frameworks**.
 
 While the templates provide clean, skeletal implementations of a CLI tool, their true purpose is to demonstrate how **Murli** can be applied on top of them to achieve consistent, dual-audience (human and AI agent) capabilities across different languages and library ecosystems.
 
@@ -47,12 +45,13 @@ make install-deps
 
 ### 2. Build Skeletons (Outputs binaries and scripts to `./bin/`)
 ```bash
-# Build Go, Rust, and TS, and set up Python direct execution scripts
+# Build Go, Rust, TS, and Zig, and set up Python direct execution scripts
 make build-all
 
 # Or build individually
 make build-go          # Builds Go Cobra & urfave/cli (murli-work-go-*)
 make build-rust-clap   # Compiles Rust Clap (murli-work-rust-clap)
+make build-zig         # Compiles Zig Clap (murli-work-zig)
 make build-ts          # Transpiles Commander, Yargs, and Oclif (murli-work-ts-*)
 make build-py          # Scaffolds executable Python wrappers (murli-work-py-*)
 ```
@@ -64,11 +63,13 @@ You can run any template directly from `./bin/` or using `make run-*`. Use the `
 # Get help menus
 make run-go-cobra
 make run-rust-clap
+make run-zig
 make run-py-typer
 
 # Pass active parameters
 make run-go-cobra CMD="task create 'My New Task' --priority high"
 make run-rust-clap CMD="task create 'My New Task' --priority high"
+make run-zig CMD="task create 'My New Task' --priority high"
 make run-py-typer CMD="task create 'My New Task' --priority high"
 make run-ts-commander CMD="task create 'My New Task' --priority high"
 ```
@@ -113,6 +114,10 @@ For a rigorous, detailed guide on the reference command parameters, validation r
     ├── commander/          # commander structure
     ├── yargs/              # yargs fluent chain
     └── oclif/              # oclif enterprise framework structure
+│
+└── zig/                    # Zig Skeleton (Target for murli-zig port)
+    ├── src/                # Stateless database, format, and main implementation files
+    └── build.zig           # Modular build system for Zig 0.16.0
 ```
 
 ---
@@ -132,6 +137,7 @@ Each template represents a benchmark for applying Murli. Below is the matrix of 
 | **TypeScript**| `commander` | `JSON` (stdlib) | `cli-table3` | Target for future TypeScript-native Murli adapters. |
 | **TypeScript**| `yargs` | `JSON` (stdlib) | `cli-table3` | Target for fluent TS-native Murli adapters. |
 | **TypeScript**| `oclif` | `JSON` (stdlib) | `@oclif/table` | Multi-command directory framework integration. |
+| **Zig**        | `zig-clap` | `std.json` (stdlib)| Manual formatting | Native stateless implementation under Zig 0.16.0. |
 
 ---
 
