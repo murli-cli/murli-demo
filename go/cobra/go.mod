@@ -3,7 +3,7 @@ module murli-work-cobra
 go 1.26.2
 
 require (
-	github.com/murli-cli/murli-go v1.0.2
+	github.com/murli-cli/murli-go v1.0.3-0.20260602052039-7ed6903a78a5
 	github.com/spf13/cobra v1.8.0
 	murli-work-shared v0.0.0
 )
