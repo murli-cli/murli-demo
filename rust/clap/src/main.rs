@@ -1,5 +1,5 @@
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
-use std::process;
+use serde_json::json;
 use murli::AgentError;
 
 mod db;
@@ -25,13 +25,8 @@ enum Commands {
     Label(LabelArgs),
     /// Display progress report
     Report,
-    // Murli built-ins — hidden from --help output
     #[command(name = "describe", hide = true)]
-    Describe {
-        /// Generate an AGENTS.md stub instead of JSON
-        #[arg(long)]
-        agents_md: bool,
-    },
+    Describe { #[arg(long)] agents_md: bool },
     #[command(name = "doctor", hide = true)]
     Doctor,
 }
@@ -46,61 +41,30 @@ struct TaskArgs {
 enum TaskCommands {
     /// Create a new task
     Create {
-        /// Task title
         title: String,
-        /// Task description
-        #[arg(short, long)]
-        desc: Option<String>,
-        /// Task priority
-        #[arg(short, long, value_enum)]
-        priority: Option<Priority>,
-        /// Comma-separated labels
-        #[arg(short, long, value_delimiter = ',')]
-        labels: Vec<String>,
+        #[arg(short, long)] desc: Option<String>,
+        #[arg(short, long, value_enum)] priority: Option<Priority>,
+        #[arg(short, long, value_delimiter = ',')] labels: Vec<String>,
     },
     /// List stored tasks
     List {
-        /// Filter by status
-        #[arg(short, long, value_enum)]
-        status: Option<Status>,
-        /// Filter by priority
-        #[arg(short, long, value_enum)]
-        priority: Option<Priority>,
-        /// Filter by a label
-        #[arg(short, long)]
-        label: Option<String>,
+        #[arg(short, long, value_enum)] status: Option<Status>,
+        #[arg(short, long, value_enum)] priority: Option<Priority>,
+        #[arg(short, long)] label: Option<String>,
         /// Output format (TTY only; agent mode always returns JSON envelope)
-        #[arg(short, long, value_enum, default_value_t = Format::Table)]
-        output: Format,
+        #[arg(short, long, value_enum, default_value_t = Format::Table)] output: Format,
     },
     /// Update an existing task's fields
     Update {
-        /// Task ID
         id: u32,
-        /// New title
-        #[arg(short, long)]
-        title: Option<String>,
-        /// New description
-        #[arg(short, long)]
-        desc: Option<String>,
-        /// New priority
-        #[arg(short, long, value_enum)]
-        priority: Option<Priority>,
-        /// New status
-        #[arg(short, long, value_enum)]
-        status: Option<Status>,
-        /// Replacement labels
-        #[arg(short, long, value_delimiter = ',')]
-        labels: Option<Vec<String>>,
+        #[arg(short, long)] title: Option<String>,
+        #[arg(short, long)] desc: Option<String>,
+        #[arg(short, long, value_enum)] priority: Option<Priority>,
+        #[arg(short, long, value_enum)] status: Option<Status>,
+        #[arg(short, long, value_delimiter = ',')] labels: Option<Vec<String>>,
     },
     /// Delete a task
-    Delete {
-        /// Task ID
-        id: u32,
-        /// Force delete without warning
-        #[arg(long)]
-        force: bool,
-    },
+    Delete { id: u32, #[arg(long)] force: bool },
 }
 
 #[derive(Args)]
@@ -114,15 +78,9 @@ enum LabelCommands {
     /// List all defined labels
     List,
     /// Create a custom label
-    Create {
-        /// Label name
-        name: String,
-    },
+    Create { name: String },
     /// Delete a label
-    Delete {
-        /// Label name
-        name: String,
-    },
+    Delete { name: String },
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
@@ -142,10 +100,25 @@ fn status_str(s: Status) -> String {
     match s { Status::Todo => "todo", Status::Doing => "doing", Status::Done => "done" }.to_string()
 }
 
+fn map_err(e: Box<dyn std::error::Error>) -> AgentError {
+    let msg = e.to_string();
+    if msg.contains("not found") {
+        AgentError::not_found(&msg, "Use task list or label list to see valid identifiers.")
+    } else if msg.contains("already exists") {
+        AgentError::conflict(&msg, "Use label list to see existing labels.")
+    } else if msg.contains("invalid priority") || msg.contains("invalid status") || msg.contains("invalid label") {
+        AgentError::user_error(&msg, "Check the valid values in --help.")
+    } else {
+        AgentError::tool_error(&msg)
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
     let root_cmd = Cli::command();
     murli::clap::handle_builtins(&cli.murli, &root_cmd, None);
+
+    let mut writer = murli::clap::writer_from_args(&cli.murli);
 
     match cli.command {
         Commands::Describe { agents_md } => {
@@ -158,36 +131,40 @@ fn main() {
                 println!("All naming conventions satisfied.");
             } else {
                 for issue in &issues { println!("{issue}"); }
-                process::exit(1);
+                std::process::exit(1);
             }
         }
         Commands::Init => {
-            if let Err(e) = db::reset_db() {
-                eprintln!("Error: {}", e);
-                process::exit(1);
+            match db::reset_db() {
+                Ok(()) => {
+                    let dir = db::get_storage_dir();
+                    writer.write_success(
+                        &format!("Initialized/Reset murli-work database with sample data and configuration in {}", dir.display()),
+                        &json!({"path": dir.display().to_string()}),
+                    );
+                }
+                Err(e) => writer.write_error(AgentError::tool_error(&e.to_string())),
             }
-            let dir = db::get_storage_dir();
-            println!(
-                "Initialized/Reset murli-work database with sample data and configuration in {}",
-                dir.display()
-            );
         }
         Commands::Task(task_args) => match task_args.command {
             TaskCommands::Create { title, desc, priority, labels } => {
+                let prio = priority.map(prio_str);
                 let mut db = match db::load_db() {
                     Ok(d) => d,
-                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
+                    Err(e) => writer.write_error(AgentError::tool_error(&e.to_string())),
                 };
-                let prio = priority.map(prio_str);
                 match db::create_task(&mut db, &title, desc, prio, labels) {
-                    Ok(id) => println!("Task {} (\"{}\") created successfully.", id, title),
-                    Err(e) => { eprintln!("Error: {}", e); process::exit(2); }
+                    Ok(id) => writer.write_success(
+                        &format!("Task {} (\"{}\") created successfully.", id, title),
+                        &json!({"id": id, "title": &title}),
+                    ),
+                    Err(e) => writer.write_error(map_err(e)),
                 }
             }
             TaskCommands::List { status, priority, label, output } => {
                 let db = match db::load_db() {
                     Ok(d) => d,
-                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
+                    Err(e) => writer.write_error(AgentError::tool_error(&e.to_string())),
                 };
                 let mut output_fmt = match output {
                     Format::Table => "table", Format::Json => "json", Format::Csv => "csv",
@@ -196,39 +173,50 @@ fn main() {
                     if let Ok(cfg) = db::load_config() { output_fmt = cfg.default_output; }
                 }
                 let mut filtered = db.tasks.clone();
-                if let Some(s) = status { filtered.retain(|t| t.status == status_str(s)); }
-                if let Some(p) = priority { filtered.retain(|t| t.priority == prio_str(p)); }
-                if let Some(lbl) = label { filtered.retain(|t| t.labels.iter().any(|l| l.eq_ignore_ascii_case(&lbl))); }
-                match output_fmt.as_str() {
-                    "json" => format::print_tasks_json(&filtered),
-                    "csv"  => format::print_tasks_csv(&filtered),
-                    _      => format::print_tasks_table(&filtered),
+                if let Some(s) = status   { filtered.retain(|t| t.status.eq_ignore_ascii_case(&status_str(s))); }
+                if let Some(p) = priority { filtered.retain(|t| t.priority.eq_ignore_ascii_case(&prio_str(p))); }
+                if let Some(lbl) = label  { filtered.retain(|t| t.labels.iter().any(|l| l.eq_ignore_ascii_case(&lbl))); }
+
+                if writer.is_tty() {
+                    match output_fmt.as_str() {
+                        "json" => format::print_tasks_json(&filtered),
+                        "csv"  => format::print_tasks_csv(&filtered),
+                        _      => println!("{}", format::format_tasks_table(&filtered)),
+                    }
+                } else {
+                    let tasks_val = serde_json::to_value(&filtered).unwrap_or(json!([]));
+                    writer.write_success(
+                        &format!("Found {} task(s).", filtered.len()),
+                        &json!({"tasks": tasks_val, "count": filtered.len()}),
+                    );
                 }
             }
             TaskCommands::Update { id, title, desc, priority, status, labels } => {
-                let mut db = match db::load_db() {
-                    Ok(d) => d,
-                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
-                };
                 let prio = priority.map(prio_str);
                 let stat = status.map(status_str);
+                let mut db = match db::load_db() {
+                    Ok(d) => d,
+                    Err(e) => writer.write_error(AgentError::tool_error(&e.to_string())),
+                };
                 match db::update_task(&mut db, id, title, desc, prio, stat, labels) {
-                    Ok(_) => println!("Task {} updated successfully.", id),
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                        let msg = e.to_string();
-                        process::exit(if msg.contains("not found") { 1 } else { 2 });
-                    }
+                    Ok(()) => writer.write_success(
+                        &format!("Task {} updated successfully.", id),
+                        &json!({"id": id}),
+                    ),
+                    Err(e) => writer.write_error(map_err(e)),
                 }
             }
             TaskCommands::Delete { id, force: _ } => {
                 let mut db = match db::load_db() {
                     Ok(d) => d,
-                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
+                    Err(e) => writer.write_error(AgentError::tool_error(&e.to_string())),
                 };
                 match db::delete_task(&mut db, id) {
-                    Ok(_) => println!("Task {} deleted successfully.", id),
-                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
+                    Ok(()) => writer.write_success(
+                        &format!("Task {} deleted successfully.", id),
+                        &json!({"id": id}),
+                    ),
+                    Err(e) => writer.write_error(map_err(e)),
                 }
             }
         }
@@ -236,37 +224,55 @@ fn main() {
             LabelCommands::List => {
                 let db = match db::load_db() {
                     Ok(d) => d,
-                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
+                    Err(e) => writer.write_error(AgentError::tool_error(&e.to_string())),
                 };
-                format::print_labels_table(&db);
+                if writer.is_tty() {
+                    format::print_labels_table(&db);
+                } else {
+                    let labels_val = serde_json::to_value(&db.labels).unwrap_or(json!([]));
+                    writer.write_success(
+                        &format!("Found {} label(s).", db.labels.len()),
+                        &json!({"labels": labels_val}),
+                    );
+                }
             }
             LabelCommands::Create { name } => {
                 let mut db = match db::load_db() {
                     Ok(d) => d,
-                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
+                    Err(e) => writer.write_error(AgentError::tool_error(&e.to_string())),
                 };
                 match db::create_label(&mut db, &name) {
-                    Ok(slug) => println!("Label \"{}\" created successfully.", slug),
-                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
+                    Ok(slug) => writer.write_success(
+                        &format!("Label \"{}\" created successfully.", slug),
+                        &json!({"slug": &slug}),
+                    ),
+                    Err(e) => writer.write_error(map_err(e)),
                 }
             }
             LabelCommands::Delete { name } => {
                 let mut db = match db::load_db() {
                     Ok(d) => d,
-                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
+                    Err(e) => writer.write_error(AgentError::tool_error(&e.to_string())),
                 };
                 match db::delete_label(&mut db, &name) {
-                    Ok(_) => println!("Label \"{}\" deleted successfully.", name),
-                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
+                    Ok(()) => writer.write_success(
+                        &format!("Label \"{}\" deleted successfully.", name),
+                        &json!({"name": &name}),
+                    ),
+                    Err(e) => writer.write_error(map_err(e)),
                 }
             }
         }
         Commands::Report => {
             let db = match db::load_db() {
                 Ok(d) => d,
-                Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
+                Err(e) => writer.write_error(AgentError::tool_error(&e.to_string())),
             };
-            format::print_sprint_report(&db);
+            if writer.is_tty() {
+                format::print_sprint_report(&db);
+            } else {
+                writer.write_success("Sprint report generated.", &format::sprint_report_data(&db));
+            }
         }
     }
 }

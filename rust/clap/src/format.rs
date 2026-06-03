@@ -1,4 +1,5 @@
 use crate::db::{Database, Task};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 
 pub fn print_tasks_table(tasks: &[Task]) {
@@ -128,4 +129,51 @@ pub fn print_sprint_report(db: &Database) {
     println!("- MEDIUM: {} tasks", medium);
     println!("- LOW   : {} tasks", low);
     println!("========================================");
+}
+
+pub fn format_tasks_table(tasks: &[Task]) -> String {
+    let border = "+----+----------------------+--------+----------+------------+";
+    let header = "| ID | Title                | Status | Priority | Labels     |";
+    let mut lines = vec![border.to_string(), header.to_string(), border.to_string()];
+    for t in tasks {
+        let labels_str = t.labels.join(",");
+        let status   = t.status.to_uppercase();
+        let priority = t.priority.to_uppercase();
+        let title_trunc  = if t.title.len()   > 20 { &t.title[..20]    } else { &t.title };
+        let status_trunc = if status.len()     > 6  { &status[..6]      } else { &status };
+        let prio_trunc   = if priority.len()   > 8  { &priority[..8]    } else { &priority };
+        let labels_trunc = if labels_str.len() > 10 { &labels_str[..10] } else { &labels_str };
+        lines.push(format!(
+            "| {:<2} | {:<20} | {:<6} | {:<8} | {:<10} |",
+            t.id, title_trunc, status_trunc, prio_trunc, labels_trunc,
+        ));
+    }
+    lines.push(border.to_string());
+    lines.join("\n")
+}
+
+pub fn sprint_report_data(db: &Database) -> Value {
+    let total = db.tasks.len();
+    let (mut completed, mut todo, mut doing, mut done) = (0usize, 0usize, 0usize, 0usize);
+    let (mut high, mut medium, mut low) = (0usize, 0usize, 0usize);
+    for t in &db.tasks {
+        match t.status.to_lowercase().as_str() {
+            "todo"  => todo  += 1,
+            "doing" => doing += 1,
+            "done"  => { done += 1; completed += 1; }
+            _       => {}
+        }
+        match t.priority.to_lowercase().as_str() {
+            "low"    => low    += 1,
+            "medium" => medium += 1,
+            "high"   => high   += 1,
+            _        => {}
+        }
+    }
+    let percent = if total > 0 { (completed * 100) / total } else { 0 };
+    json!({
+        "total": total, "completed": completed, "percent": percent,
+        "status":   { "todo": todo,   "doing": doing,  "done": done  },
+        "priority": { "high": high,   "medium": medium, "low": low   },
+    })
 }
