@@ -1,13 +1,16 @@
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use std::process;
+use murli::AgentError;
 
 mod db;
 mod format;
 
 #[derive(Parser)]
-#[command(name = "murli-work")]
-#[command(about = "A sprint and project task tracker", long_about = None)]
+#[command(name = "murli-work", about = "A sprint and project task tracker", long_about = None)]
 struct Cli {
+    #[command(flatten)]
+    murli: murli::clap::GlobalArgs,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -22,6 +25,15 @@ enum Commands {
     Label(LabelArgs),
     /// Display progress report
     Report,
+    // Murli built-ins — hidden from --help output
+    #[command(name = "describe", hide = true)]
+    Describe {
+        /// Generate an AGENTS.md stub instead of JSON
+        #[arg(long)]
+        agents_md: bool,
+    },
+    #[command(name = "doctor", hide = true)]
+    Doctor,
 }
 
 #[derive(Args)]
@@ -57,7 +69,7 @@ enum TaskCommands {
         /// Filter by a label
         #[arg(short, long)]
         label: Option<String>,
-        /// Output format
+        /// Output format (TTY only; agent mode always returns JSON envelope)
         #[arg(short, long, value_enum, default_value_t = Format::Table)]
         output: Format,
     },
@@ -114,30 +126,41 @@ enum LabelCommands {
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
-enum Priority {
-    Low,
-    Medium,
-    High,
-}
+enum Priority { Low, Medium, High }
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
-enum Status {
-    Todo,
-    Doing,
-    Done,
-}
+enum Status { Todo, Doing, Done }
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
-enum Format {
-    Table,
-    Json,
-    Csv,
+enum Format { Table, Json, Csv }
+
+fn prio_str(p: Priority) -> String {
+    match p { Priority::Low => "low", Priority::Medium => "medium", Priority::High => "high" }.to_string()
+}
+
+fn status_str(s: Status) -> String {
+    match s { Status::Todo => "todo", Status::Doing => "doing", Status::Done => "done" }.to_string()
 }
 
 fn main() {
     let cli = Cli::parse();
+    let root_cmd = Cli::command();
+    murli::clap::handle_builtins(&cli.murli, &root_cmd, None);
 
     match cli.command {
+        Commands::Describe { agents_md } => {
+            if agents_md { murli::clap::emit_agents_md(&root_cmd, ""); }
+            else         { murli::clap::emit_describe(&root_cmd, ""); }
+        }
+        Commands::Doctor => {
+            let issues = murli::clap::doctor(&root_cmd);
+            if issues.is_empty() {
+                println!("All naming conventions satisfied.");
+            } else {
+                for issue in &issues { println!("{issue}"); }
+                process::exit(1);
+            }
+        }
         Commands::Init => {
             if let Err(e) = db::reset_db() {
                 eprintln!("Error: {}", e);
@@ -153,196 +176,95 @@ fn main() {
             TaskCommands::Create { title, desc, priority, labels } => {
                 let mut db = match db::load_db() {
                     Ok(d) => d,
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                        process::exit(1);
-                    }
+                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
                 };
-
-                let prio_str = priority.map(|p| match p {
-                    Priority::Low => "low".to_string(),
-                    Priority::Medium => "medium".to_string(),
-                    Priority::High => "high".to_string(),
-                });
-
-                match db::create_task(&mut db, &title, desc, prio_str, labels) {
-                    Ok(id) => {
-                        println!("Task {} (\"{}\") created successfully.", id, title);
-                    }
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                        process::exit(2);
-                    }
+                let prio = priority.map(prio_str);
+                match db::create_task(&mut db, &title, desc, prio, labels) {
+                    Ok(id) => println!("Task {} (\"{}\") created successfully.", id, title),
+                    Err(e) => { eprintln!("Error: {}", e); process::exit(2); }
                 }
             }
             TaskCommands::List { status, priority, label, output } => {
                 let db = match db::load_db() {
                     Ok(d) => d,
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                        process::exit(1);
-                    }
+                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
                 };
-
                 let mut output_fmt = match output {
-                    Format::Table => "table".to_string(),
-                    Format::Json => "json".to_string(),
-                    Format::Csv => "csv".to_string(),
-                };
-
+                    Format::Table => "table", Format::Json => "json", Format::Csv => "csv",
+                }.to_string();
                 if output_fmt == "table" {
-                    if let Ok(cfg) = db::load_config() {
-                        output_fmt = cfg.default_output;
-                    }
+                    if let Ok(cfg) = db::load_config() { output_fmt = cfg.default_output; }
                 }
-
-                // Filter in-memory
                 let mut filtered = db.tasks.clone();
-
-                if let Some(s) = status {
-                    let s_str = match s {
-                        Status::Todo => "todo",
-                        Status::Doing => "doing",
-                        Status::Done => "done",
-                    };
-                    filtered.retain(|t| t.status.to_lowercase() == s_str);
-                }
-
-                if let Some(p) = priority {
-                    let p_str = match p {
-                        Priority::Low => "low",
-                        Priority::Medium => "medium",
-                        Priority::High => "high",
-                    };
-                    filtered.retain(|t| t.priority.to_lowercase() == p_str);
-                }
-
-                if let Some(lbl) = label {
-                    filtered.retain(|t| t.labels.iter().any(|l| l.to_lowercase() == lbl.to_lowercase()));
-                }
-
-                match output_fmt.to_lowercase().as_str() {
+                if let Some(s) = status { filtered.retain(|t| t.status == status_str(s)); }
+                if let Some(p) = priority { filtered.retain(|t| t.priority == prio_str(p)); }
+                if let Some(lbl) = label { filtered.retain(|t| t.labels.iter().any(|l| l.eq_ignore_ascii_case(&lbl))); }
+                match output_fmt.as_str() {
                     "json" => format::print_tasks_json(&filtered),
-                    "csv" => format::print_tasks_csv(&filtered),
-                    _ => format::print_tasks_table(&filtered),
+                    "csv"  => format::print_tasks_csv(&filtered),
+                    _      => format::print_tasks_table(&filtered),
                 }
             }
             TaskCommands::Update { id, title, desc, priority, status, labels } => {
                 let mut db = match db::load_db() {
                     Ok(d) => d,
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                        process::exit(1);
-                    }
+                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
                 };
-
-                let prio_str = priority.map(|p| match p {
-                    Priority::Low => "low".to_string(),
-                    Priority::Medium => "medium".to_string(),
-                    Priority::High => "high".to_string(),
-                });
-
-                let status_str = status.map(|s| match s {
-                    Status::Todo => "todo".to_string(),
-                    Status::Doing => "doing".to_string(),
-                    Status::Done => "done".to_string(),
-                });
-
-                match db::update_task(&mut db, id, title, desc, prio_str, status_str, labels) {
-                    Ok(_) => {
-                        println!("Task {} updated successfully.", id);
-                    }
+                let prio = priority.map(prio_str);
+                let stat = status.map(status_str);
+                match db::update_task(&mut db, id, title, desc, prio, stat, labels) {
+                    Ok(_) => println!("Task {} updated successfully.", id),
                     Err(e) => {
                         eprintln!("Error: {}", e);
                         let msg = e.to_string();
-                        let exit_code = if msg.contains("not found") {
-                            1
-                        } else if msg.contains("priority") || msg.contains("status") {
-                            2
-                        } else {
-                            1
-                        };
-                        process::exit(exit_code);
+                        process::exit(if msg.contains("not found") { 1 } else { 2 });
                     }
                 }
             }
             TaskCommands::Delete { id, force: _ } => {
                 let mut db = match db::load_db() {
                     Ok(d) => d,
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                        process::exit(1);
-                    }
+                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
                 };
-
                 match db::delete_task(&mut db, id) {
-                    Ok(_) => {
-                        println!("Task {} deleted successfully.", id);
-                    }
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                        process::exit(1);
-                    }
+                    Ok(_) => println!("Task {} deleted successfully.", id),
+                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
                 }
             }
-        },
+        }
         Commands::Label(label_args) => match label_args.command {
             LabelCommands::List => {
                 let db = match db::load_db() {
                     Ok(d) => d,
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                        process::exit(1);
-                    }
+                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
                 };
                 format::print_labels_table(&db);
             }
             LabelCommands::Create { name } => {
                 let mut db = match db::load_db() {
                     Ok(d) => d,
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                        process::exit(1);
-                    }
+                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
                 };
-
                 match db::create_label(&mut db, &name) {
-                    Ok(slug) => {
-                        println!("Label \"{}\" created successfully.", slug);
-                    }
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                        process::exit(1);
-                    }
+                    Ok(slug) => println!("Label \"{}\" created successfully.", slug),
+                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
                 }
             }
             LabelCommands::Delete { name } => {
                 let mut db = match db::load_db() {
                     Ok(d) => d,
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                        process::exit(1);
-                    }
+                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
                 };
-
                 match db::delete_label(&mut db, &name) {
-                    Ok(_) => {
-                        println!("Label \"{}\" deleted successfully.", name);
-                    }
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                        process::exit(1);
-                    }
+                    Ok(_) => println!("Label \"{}\" deleted successfully.", name),
+                    Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
                 }
             }
-        },
+        }
         Commands::Report => {
             let db = match db::load_db() {
                 Ok(d) => d,
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    process::exit(1);
-                }
+                Err(e) => { eprintln!("Error: {}", e); process::exit(1); }
             };
             format::print_sprint_report(&db);
         }
