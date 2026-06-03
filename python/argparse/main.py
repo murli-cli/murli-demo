@@ -1,6 +1,7 @@
 import argparse
 import sys
 import os
+import murli
 
 # Add sibling folder path to imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -64,13 +65,16 @@ def main():
     # report command
     report_parser = subparsers.add_parser("report", help="Display progress report")
 
+    # Register murli adapter (must be after all add_subparsers() calls)
+    murli.enable(parser)
+
     # Parse arguments
     # If no arguments passed, print help and exit
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit(0)
 
-    args = parser.parse_args()
+    args, writer = murli.parse(parser)
 
     try:
         if args.command == "init":

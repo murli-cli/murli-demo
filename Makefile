@@ -130,7 +130,8 @@ build-ts-oclif:
 build-py:
 	@echo "==> Setting up Python launchers in ./bin/ using uv..."
 	mkdir -p bin
-	[ -d .venv ] || (uv venv && uv pip install -r python/requirements.txt)
+	[ -d .venv ] || uv venv
+	uv pip install -r python/requirements.txt
 	# Python click launcher
 	@echo '#!/usr/bin/env -S uv run python\nimport sys, os\nsys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../python/click")))\nimport main\nif __name__ == "__main__": main.cli()' > bin/murli-work-py-click
 	chmod +x bin/murli-work-py-click
