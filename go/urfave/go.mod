@@ -3,7 +3,7 @@ module murli-work-urfave
 go 1.26.2
 
 require (
-	github.com/murli-cli/murli-go v1.0.2
+	github.com/murli-cli/murli-go v1.0.3-0.20260602052039-7ed6903a78a5
 	github.com/urfave/cli/v2 v2.27.7
 	murli-work-shared v0.0.0
 )
