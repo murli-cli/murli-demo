@@ -19,6 +19,7 @@ def cli():
 @murli.pass_writer
 def init(writer):
     """Initialize/Reset the database and config"""
+    writer.log("Resetting database and seeding sample data...")
     db_ops.reset_db()
     dir_path = db_ops.get_storage_dir()
     writer.write_success(
@@ -207,6 +208,7 @@ def label_delete(writer, name):
 @murli.pass_writer
 def report(writer):
     """Display progress report"""
+    writer.log("Computing sprint statistics...")
     try:
         db = db_ops.load_db()
     except Exception as e:
