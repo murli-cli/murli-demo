@@ -113,7 +113,109 @@ fn map_err(e: Box<dyn std::error::Error>) -> AgentError {
     }
 }
 
+fn props_map(pairs: &[(&str, &str)]) -> std::collections::HashMap<String, serde_json::Value> {
+    pairs.iter()
+        .map(|(k, v)| (k.to_string(), serde_json::Value::String(v.to_string())))
+        .collect()
+}
+
+fn register_annotations() {
+    use clap::Command;
+    use murli::schema::{Example, Metadata, ReturnSchema};
+
+    murli::clap::annotate(&mut Command::new("init"), Metadata {
+        agent_description: "Resets the database to seed data and writes default config.".into(),
+        when_to_use: "First-time setup or to restore the database to a clean state.".into(),
+        mutating: true, idempotent: true,
+        returns: Some(ReturnSchema {
+            description: "Storage directory path".into(),
+            r#type: "object".into(),
+            properties: props_map(&[("path", "string")]),
+        }),
+        ..Default::default()
+    });
+
+    murli::clap::annotate(&mut Command::new("create"), Metadata {
+        agent_description: "Creates a new item. For tasks: assigns ID. For labels: slugifies the name.".into(),
+        when_to_use: "Adding a new task to the backlog or defining a new label category.".into(),
+        mutating: true, idempotent: false,
+        returns: Some(ReturnSchema {
+            description: "Created item identifier".into(),
+            r#type: "object".into(),
+            properties: props_map(&[("id", "int|string")]),
+        }),
+        examples: vec![Example {
+            command: "murli-work task create \"Fix login bug\" --priority high --labels dev".into(),
+            description: String::new(),
+            expected_exit_code: 0,
+        }],
+        ..Default::default()
+    });
+
+    murli::clap::annotate(&mut Command::new("list"), Metadata {
+        agent_description: "Lists items. For tasks: accepts --status, --priority, --label filters.".into(),
+        when_to_use: "Querying the sprint backlog or checking available labels.".into(),
+        mutating: false, idempotent: true,
+        returns: Some(ReturnSchema {
+            description: "Filtered items with count".into(),
+            r#type: "object".into(),
+            properties: props_map(&[("tasks", "array"), ("count", "int")]),
+        }),
+        examples: vec![Example {
+            command: "murli-work task list --status doing --priority high".into(),
+            description: String::new(),
+            expected_exit_code: 0,
+        }],
+        ..Default::default()
+    });
+
+    murli::clap::annotate(&mut Command::new("update"), Metadata {
+        agent_description: "Updates one or more fields on an existing task. Omitted flags are unchanged.".into(),
+        when_to_use: "Changing the status, priority, title, or labels of a task.".into(),
+        mutating: true, idempotent: true,
+        returns: Some(ReturnSchema {
+            description: "Updated task ID".into(),
+            r#type: "object".into(),
+            properties: props_map(&[("id", "int")]),
+        }),
+        examples: vec![Example {
+            command: "murli-work task update 3 --status done".into(),
+            description: String::new(),
+            expected_exit_code: 0,
+        }],
+        ..Default::default()
+    });
+
+    murli::clap::annotate(&mut Command::new("delete"), Metadata {
+        agent_description: "Permanently removes an item by ID or name. Also removes label refs from tasks.".into(),
+        when_to_use: "Removing a cancelled task or cleaning up an unused label.".into(),
+        mutating: true, idempotent: false, destructive: true,
+        returns: Some(ReturnSchema {
+            description: "Deleted item identifier".into(),
+            r#type: "object".into(),
+            properties: props_map(&[("id", "int|string")]),
+        }),
+        ..Default::default()
+    });
+
+    murli::clap::annotate(&mut Command::new("report"), Metadata {
+        agent_description: "Computes and returns sprint completion statistics by status and priority.".into(),
+        when_to_use: "Getting a structured summary of sprint progress.".into(),
+        mutating: false, idempotent: true,
+        returns: Some(ReturnSchema {
+            description: "Sprint statistics".into(),
+            r#type: "object".into(),
+            properties: props_map(&[
+                ("total", "int"), ("completed", "int"), ("percent", "int"),
+                ("status", "object"), ("priority", "object"),
+            ]),
+        }),
+        ..Default::default()
+    });
+}
+
 fn main() {
+    register_annotations();
     let cli = Cli::parse();
     let root_cmd = Cli::command();
     murli::clap::handle_builtins(&cli.murli, &root_cmd, None);
