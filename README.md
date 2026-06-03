@@ -15,8 +15,19 @@ To keep the repository clean and allow developers to compare the "before" and "a
    - Ideal for starting a fresh integration or studying standard framework patterns.
 2. **Feature Branches (Murli Integrations):**
    - The integration of **Murli CLI middleware** is managed on a dedicated feature branch for each language and library.
-   - **Branch Naming:** `<language>/<library>` (e.g., `go/cobra`, `go/urfavecliv2`, `go/urfavecliv3`).
-   - Each branch includes the fully wrapped application, a detailed integration guide (e.g., `GO-COBRA-GUIDE.md`), and committed terminal outputs showing TTY-awareness and agent modes in action.
+   - **Branch Naming:** `<language>/<library>` (e.g., `go/cobra`, `python/click`).
+   - Each branch includes the fully wrapped application, a detailed integration guide (e.g., `PYTHON-CLICK-GUIDE.md`), and committed terminal outputs showing TTY-awareness and agent modes in action.
+
+### Completed Integration Branches
+
+| Branch | Language | Framework | Guide |
+| :--- | :--- | :--- | :--- |
+| [`go/cobra`](../../tree/go/cobra) | Go | spf13/cobra | `GO-COBRA-GUIDE.md` |
+| [`go/urfavecliv2`](../../tree/go/urfavecliv2) | Go | urfave/cli v2 | `GO-URFAVECLIV2-GUIDE.md` |
+| [`go/urfavecliv3`](../../tree/go/urfavecliv3) | Go | urfave/cli v3 | `GO-URFAVECLIV3-GUIDE.md` |
+| [`python/click`](../../tree/python/click) | Python | click | `PYTHON-CLICK-GUIDE.md` |
+| [`python/typer`](../../tree/python/typer) | Python | typer | `PYTHON-TYPER-GUIDE.md` |
+| [`python/argparse`](../../tree/python/argparse) | Python | argparse | `PYTHON-ARGPARSE-GUIDE.md` |
 
 ---
 
@@ -131,9 +142,9 @@ Each template represents a benchmark for applying Murli. Below is the matrix of 
 | **Go** | `spf13/cobra` | `encoding/json` (stdlib) | `github.com/olekukonko/tablewriter` | Easily wrapped via the official `murli/cobra` adapter. |
 | **Go** | `urfave/cli/v2` | `encoding/json` (stdlib) | `github.com/olekukonko/tablewriter` | Easily wrapped via the official `murli/cli/v2` adapter. |
 | **Rust** | `clap` (v4) | `serde_json` | `comfy-table` | Target for future Rust-native Murli adapters. |
-| **Python** | `click` | `json` (stdlib) | `tabulate` | Target for future Python-native Murli adapters. |
-| **Python** | `typer` | `json` (stdlib) | `rich` (or `tabulate`) | Built on click; target for typer-specific adapters. |
-| **Python** | `argparse` | `json` (stdlib) | manual / `tabulate` | Baseline standard library comparison. |
+| **Python** | `click` | `json` (stdlib) | `tabulate` | Wrapped via `murli[click]` — see [`python/click`](../../tree/python/click). |
+| **Python** | `typer` | `json` (stdlib) | `rich` (or `tabulate`) | Wrapped via `murli[typer]` — see [`python/typer`](../../tree/python/typer). |
+| **Python** | `argparse` | `json` (stdlib) | manual / `tabulate` | Wrapped via `murli` core — see [`python/argparse`](../../tree/python/argparse). |
 | **TypeScript**| `commander` | `JSON` (stdlib) | `cli-table3` | Target for future TypeScript-native Murli adapters. |
 | **TypeScript**| `yargs` | `JSON` (stdlib) | `cli-table3` | Target for fluent TS-native Murli adapters. |
 | **TypeScript**| `oclif` | `JSON` (stdlib) | `@oclif/table` | Multi-command directory framework integration. |
