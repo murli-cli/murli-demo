@@ -3,6 +3,7 @@ from enum import Enum
 import typer
 import sys
 import os
+import murli
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import shared.db as db_ops
@@ -15,6 +16,8 @@ app.add_typer(task_app, name="task")
 
 label_app = typer.Typer(help="Manage global task labels")
 app.add_typer(label_app, name="label")
+
+murli.enable(app)   # ← add this line
 
 class Priority(str, Enum):
     low = "low"
