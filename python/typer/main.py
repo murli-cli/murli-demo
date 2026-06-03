@@ -252,6 +252,7 @@ def report(ctx: typer.Context):
         writer.write_success("Sprint report generated.", report_data)
 
 
+# Step 3: annotate root app so agents can introspect capabilities
 murli.annotate(app, Metadata(
     agent_description=(
         "murli-work sprint task tracker. Manages tasks (create/list/update/delete) "
