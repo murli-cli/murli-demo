@@ -1,6 +1,7 @@
 import click
 import sys
 import os
+import murli
 
 # Add sibling folder path to imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -181,6 +182,8 @@ def report():
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
+
+murli.enable(cli)
 
 if __name__ == "__main__":
     cli()
