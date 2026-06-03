@@ -107,3 +107,103 @@ def print_sprint_report(db):
     print(f"- MEDIUM: {medium} tasks")
     print(f"- LOW   : {low} tasks")
     print("========================================")
+
+
+import io
+
+
+def format_tasks_table(tasks: list) -> str:
+    border = "+----+----------------------+--------+----------+------------+"
+    header = "| ID | Title                | Status | Priority | Labels     |"
+    lines = [border, header, border]
+    for t in tasks:
+        labels_str = ",".join(t["labels"])
+        lines.append(
+            f"| {t['id']:<2d} | {t['title'][:20]:<20s} | {t['status'].upper()[:6]:<6s}"
+            f" | {t['priority'].upper()[:8]:<8s} | {labels_str[:10]:<10s} |"
+        )
+    lines.append(border)
+    return "\n".join(lines)
+
+
+def format_tasks_csv(tasks: list) -> str:
+    buf = io.StringIO()
+    w = csv.writer(buf, quoting=csv.QUOTE_MINIMAL)
+    w.writerow(["id", "title", "status", "priority", "labels"])
+    for t in tasks:
+        w.writerow([t["id"], t["title"], t["status"], t["priority"], ";".join(t["labels"])])
+    return buf.getvalue().rstrip()
+
+
+def format_tasks_json_str(tasks: list) -> str:
+    return json.dumps(tasks, separators=(",", ":"))
+
+
+def format_labels_table(db: dict) -> str:
+    counts = {l["name"]: 0 for l in db["labels"]}
+    for t in db["tasks"]:
+        for lbl in t["labels"]:
+            if lbl in counts:
+                counts[lbl] += 1
+    border = "+-------------+-------------+"
+    header = "| Label Name  | Task Count  |"
+    lines = [border, header, border]
+    for l in db["labels"]:
+        lines.append(f"| {l['name'][:11]:<11s} | {counts[l['name']]:<11d} |")
+    lines.append(border)
+    return "\n".join(lines)
+
+
+def sprint_report_data(db: dict) -> dict:
+    total = len(db["tasks"])
+    completed = todo = doing = done = high = medium = low = 0
+    for t in db["tasks"]:
+        s = t["status"].lower()
+        if s == "todo":
+            todo += 1
+        elif s == "doing":
+            doing += 1
+        elif s == "done":
+            done += 1
+            completed += 1
+        p = t["priority"].lower()
+        if p == "low":
+            low += 1
+        elif p == "medium":
+            medium += 1
+        elif p == "high":
+            high += 1
+    percent = (completed * 100) // total if total > 0 else 0
+    return {
+        "total": total,
+        "completed": completed,
+        "percent": percent,
+        "status": {"todo": todo, "doing": doing, "done": done},
+        "priority": {"high": high, "medium": medium, "low": low},
+    }
+
+
+def format_sprint_report(db: dict) -> str:
+    data = sprint_report_data(db)
+    percent = data["percent"]
+    blocks = "■" * (percent // 10) + "□" * (10 - percent // 10)
+    s = data["status"]
+    p = data["priority"]
+    lines = [
+        "========================================",
+        "          MURLI-WORK SPRINT REPORT      ",
+        "========================================",
+        f"Completion Rate : [{blocks}] {percent}% ({data['completed']}/{data['total']} tasks)",
+        "",
+        "Status Breakdown:",
+        f"- TODO  : {s['todo']} tasks",
+        f"- DOING : {s['doing']} tasks",
+        f"- DONE  : {s['done']} tasks",
+        "",
+        "Priority Breakdown:",
+        f"- HIGH  : {p['high']} tasks",
+        f"- MEDIUM: {p['medium']} tasks",
+        f"- LOW   : {p['low']} tasks",
+        "========================================",
+    ]
+    return "\n".join(lines)
