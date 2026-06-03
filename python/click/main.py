@@ -2,7 +2,7 @@ import click
 import sys
 import os
 import murli
-from murli import AgentError
+from murli import AgentError, Metadata, ReturnSchema, Example
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import shared.db as db_ops
@@ -218,6 +218,102 @@ def report(writer):
     else:
         writer.write_success("Sprint report generated.", report_data)
 
+
+murli.annotate(init, Metadata(
+    agent_description="Resets the database to seed data and writes default config.",
+    when_to_use="First-time setup or to restore the database to a clean state.",
+    mutating=True,
+    idempotent=True,
+    returns=ReturnSchema(description="Storage directory path", type="object",
+                         properties={"path": "string"}),
+))
+
+murli.annotate(task_create, Metadata(
+    agent_description="Creates a new task and assigns it a unique integer ID.",
+    when_to_use="Adding a new item to the sprint backlog.",
+    mutating=True,
+    idempotent=False,
+    returns=ReturnSchema(description="New task ID and title", type="object",
+                         properties={"id": "int", "title": "string"}),
+    examples=[
+        Example(command='murli-work task create "Fix login bug" --priority high --labels dev,backend'),
+    ],
+))
+
+murli.annotate(task_list, Metadata(
+    agent_description="Returns filtered tasks. Use --status, --priority, --label to narrow results.",
+    when_to_use="Querying the backlog or checking sprint progress.",
+    mutating=False,
+    idempotent=True,
+    returns=ReturnSchema(description="Filtered task list", type="object",
+                         properties={"tasks": "array", "count": "int"}),
+    examples=[
+        Example(command="murli-work task list --status doing --priority high"),
+    ],
+))
+
+murli.annotate(task_update, Metadata(
+    agent_description="Updates one or more fields on an existing task. Omitted flags are unchanged.",
+    when_to_use="Changing status, priority, or labels on a task.",
+    mutating=True,
+    idempotent=True,
+    returns=ReturnSchema(description="Updated task ID", type="object",
+                         properties={"id": "int"}),
+    examples=[
+        Example(command="murli-work task update 3 --status done"),
+    ],
+))
+
+murli.annotate(task_delete, Metadata(
+    agent_description="Permanently removes a task by ID.",
+    when_to_use="Removing a cancelled or obsolete task from the backlog.",
+    mutating=True,
+    idempotent=False,
+    destructive=True,
+    returns=ReturnSchema(description="Deleted task ID", type="object",
+                         properties={"id": "int"}),
+))
+
+murli.annotate(label_list, Metadata(
+    agent_description="Lists all labels defined in the database with task counts.",
+    when_to_use="Discovering available labels before creating or filtering tasks.",
+    mutating=False,
+    idempotent=True,
+    returns=ReturnSchema(description="Label array", type="object",
+                         properties={"labels": "array"}),
+))
+
+murli.annotate(label_create, Metadata(
+    agent_description="Creates a new label slug. Fails with conflict if it already exists.",
+    when_to_use="Adding a label category before tagging tasks with it.",
+    mutating=True,
+    idempotent=False,
+    returns=ReturnSchema(description="Created label slug", type="object",
+                         properties={"slug": "string"}),
+))
+
+murli.annotate(label_delete, Metadata(
+    agent_description="Deletes a label and removes it from all tasks.",
+    when_to_use="Cleaning up unused or misnamed labels.",
+    mutating=True,
+    idempotent=False,
+    destructive=True,
+    returns=ReturnSchema(description="Deleted label name", type="object",
+                         properties={"name": "string"}),
+))
+
+murli.annotate(report, Metadata(
+    agent_description="Computes and returns sprint completion statistics by status and priority.",
+    when_to_use="Getting a structured summary of sprint progress.",
+    mutating=False,
+    idempotent=True,
+    returns=ReturnSchema(
+        description="Sprint statistics",
+        type="object",
+        properties={"total": "int", "completed": "int", "percent": "int",
+                    "status": "object", "priority": "object"},
+    ),
+))
 
 murli.enable(cli)
 
