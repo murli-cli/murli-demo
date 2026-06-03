@@ -237,6 +237,8 @@ fn main() {
             }
         }
         Commands::Init => {
+            writer.log("Resetting database and seeding sample data...");
+            writer.flush();
             match db::reset_db() {
                 Ok(()) => {
                     let dir = db::get_storage_dir();
@@ -366,6 +368,8 @@ fn main() {
             }
         }
         Commands::Report => {
+            writer.log("Computing sprint statistics...");
+            writer.flush();
             let db = match db::load_db() {
                 Ok(d) => d,
                 Err(e) => writer.write_error(AgentError::tool_error(&e.to_string())),
@@ -377,4 +381,5 @@ fn main() {
             }
         }
     }
+    writer.flush();
 }
