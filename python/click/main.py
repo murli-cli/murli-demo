@@ -47,8 +47,10 @@ def task_create(writer, title, desc, priority, labels):
         new_id = db_ops.create_task(db, title, desc, priority, labels_list)
     except ValueError as e:
         writer.write_error(AgentError.user_error(str(e), "Use --priority low|medium|high."))
+        return
     except Exception as e:
         writer.write_error(AgentError.tool_error(str(e)))
+        return
     writer.write_success(
         f'Task {new_id} ("{title}") created successfully.',
         {"id": new_id, "title": title},
@@ -68,6 +70,7 @@ def task_list(writer, status, priority, label, output):
         cfg = db_ops.load_config()
     except Exception as e:
         writer.write_error(AgentError.tool_error(str(e)))
+        return
 
     output_fmt = output
     if output_fmt == "table" and cfg and cfg.get("default_output"):
@@ -111,10 +114,13 @@ def task_update(writer, id, title, desc, priority, status, labels):
         db_ops.update_task(db, id, title, desc, priority, status, labels_list)
     except KeyError as e:
         writer.write_error(AgentError.not_found(str(e), "Use task list to see valid IDs."))
+        return
     except ValueError as e:
         writer.write_error(AgentError.user_error(str(e), "Use --priority low|medium|high, --status todo|doing|done."))
+        return
     except Exception as e:
         writer.write_error(AgentError.tool_error(str(e)))
+        return
     writer.write_success(f"Task {id} updated successfully.", {"id": id})
 
 
@@ -129,8 +135,10 @@ def task_delete(writer, id, force):
         db_ops.delete_task(db, id)
     except KeyError as e:
         writer.write_error(AgentError.not_found(str(e), "Use task list to see valid IDs."))
+        return
     except Exception as e:
         writer.write_error(AgentError.tool_error(str(e)))
+        return
     writer.write_success(f"Task {id} deleted successfully.", {"id": id})
 
 
@@ -148,6 +156,7 @@ def label_list(writer):
         db = db_ops.load_db()
     except Exception as e:
         writer.write_error(AgentError.tool_error(str(e)))
+        return
     if writer.is_tty():
         print(format_ops.format_labels_table(db))
     else:
@@ -167,10 +176,13 @@ def label_create(writer, name):
         slug = db_ops.create_label(db, name)
     except FileExistsError as e:
         writer.write_error(AgentError.conflict_error(str(e), "Use label list to see existing labels."))
+        return
     except ValueError as e:
         writer.write_error(AgentError.user_error(str(e)))
+        return
     except Exception as e:
         writer.write_error(AgentError.tool_error(str(e)))
+        return
     writer.write_success(f'Label "{slug}" created successfully.', {"slug": slug})
 
 
@@ -184,8 +196,10 @@ def label_delete(writer, name):
         db_ops.delete_label(db, name)
     except KeyError as e:
         writer.write_error(AgentError.not_found(str(e), "Use label list to see valid labels."))
+        return
     except Exception as e:
         writer.write_error(AgentError.tool_error(str(e)))
+        return
     writer.write_success(f'Label "{name}" deleted successfully.', {"name": name})
 
 
@@ -197,6 +211,7 @@ def report(writer):
         db = db_ops.load_db()
     except Exception as e:
         writer.write_error(AgentError.tool_error(str(e)))
+        return
     report_data = format_ops.sprint_report_data(db)
     if writer.is_tty():
         print(format_ops.format_sprint_report(db))
