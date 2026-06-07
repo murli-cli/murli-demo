@@ -1,96 +1,175 @@
+import { run, newWriter, annotate } from "@murli-cli/commander";
+import { AgentError, newToolError, newUserError, setToolVersion } from "@murli-cli/core";
 import { Command } from "commander";
 import * as dbOps from "./shared/db";
 import * as formatOps from "./shared/format";
 
+setToolVersion("0.1.0");
+
+// The murli-work spec gives `task list` an app-level content format flag
+// (--output table|json|csv). Murli auto-injects its own --output (json|ndjson|text)
+// and validates it. To avoid a collision, pre-process the app's content formats:
+// rewrite csv/table to murli's `text` and stash the original in an env var that the
+// list handler reads back. (json/ndjson/text pass straight through to murli.)
+function preprocessOutputFormat(argv: string[]): void {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--output" || arg === "-o") {
+      const val = argv[i + 1];
+      if (val === "csv" || val === "table") {
+        argv[i + 1] = "text";
+        process.env.MURLI_WORK_FORMAT = val;
+      }
+    } else if (arg.startsWith("--output=")) {
+      const val = arg.slice("--output=".length);
+      if (val === "csv" || val === "table") {
+        argv[i] = "--output=text";
+        process.env.MURLI_WORK_FORMAT = val;
+      }
+    } else if (arg.startsWith("-o=")) {
+      const val = arg.slice("-o=".length);
+      if (val === "csv" || val === "table") {
+        argv[i] = "-o=text";
+        process.env.MURLI_WORK_FORMAT = val;
+      }
+    }
+  }
+}
+
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+preprocessOutputFormat(process.argv);
+
 const program = new Command();
+program.name("murli-work").description("murli-work is a sprint and project task tracker").version("0.1.0");
 
-program
-  .name("murli-work")
-  .description("murli-work - A sprint and project task tracker")
-  .version("0.1.0");
-
-// Init command
-program
+// init
+const initCmd = program
   .command("init")
   .description("Initialize/Reset the database and config")
   .action(() => {
+    const w = newWriter(initCmd);
     try {
       dbOps.resetDb();
       const dir = dbOps.getStorageDir();
-      console.log(`Initialized/Reset murli-work database with sample data and configuration in ${dir}`);
-    } catch (err: any) {
-      console.error(`Error: ${err.message}`);
-      process.exit(1);
+      w.writeSuccess(
+        `Initialized/Reset murli-work database with sample data and configuration in ${dir}`,
+        { status: "ok", directory: dir },
+      );
+    } catch (err) {
+      w.writeError(newUserError(errMessage(err), "Could not reset the database."));
     }
   });
+annotate(initCmd, {
+  mutating: true,
+  agentDescription: "Initialize or reset the murli-work database with sample data.",
+});
 
-// Task command and its subcommands
+// task group
 const taskCmd = new Command("task").description("Manage sprint tasks");
 
-taskCmd
+const taskCreate = taskCmd
   .command("create <title>")
   .description("Create a new task")
   .option("-d, --desc <description>", "Task description", "")
   .option("-p, --priority <priority>", "Task priority (low|medium|high)")
   .option("-l, --labels <labels>", "Comma-separated labels")
-  .action((title, options) => {
+  .action((title: string, options: { desc: string; priority?: string; labels?: string }) => {
+    const w = newWriter(taskCreate);
+    let db: dbOps.Database;
     try {
-      const db = dbOps.loadDb();
-      const labelsList = options.labels ? options.labels.split(",") : [];
+      db = dbOps.loadDb();
+    } catch (err) {
+      w.writeError(newToolError(errMessage(err)));
+      return;
+    }
+    const labelsList = options.labels ? options.labels.split(",") : [];
+    try {
       const id = dbOps.createTask(db, title, options.desc, options.priority, labelsList);
-      console.log(`Task %d ("%s") created successfully.`, id, title);
-    } catch (err: any) {
-      console.error(`Error: ${err.message}`);
-      process.exit(err.message.includes("priority") ? 2 : 1);
+      w.writeSuccess(`Task ${id} ("${title}") created successfully.`, { id, title });
+    } catch (err) {
+      // Invalid enum (priority) — argument/validation error, exit code 2 per spec.
+      w.writeError(
+        new AgentError({ code: 2, error: "validation_error", message: errMessage(err), recoverable: false }),
+      );
     }
   });
+annotate(taskCreate, {
+  mutating: true,
+  agentDescription: "Create a new task in the database.",
+  arguments: [{ name: "title", type: "string", required: true, description: "Task title" }],
+  flagAnnotations: { priority: { enum: ["low", "medium", "high"] } },
+});
 
-taskCmd
+const taskList = taskCmd
   .command("list")
   .description("List stored tasks")
   .option("-s, --status <status>", "Filter by status (todo|doing|done)")
   .option("-p, --priority <priority>", "Filter by priority (low|medium|high)")
   .option("-l, --label <label>", "Filter by label")
-  .option("-o, --output <output>", "Output format (table|json|csv)", "table")
-  .action((options) => {
+  // No app-level --output here: murli injects --output (json|ndjson|text). The
+  // human content format (table|csv|json) is recovered from MURLI_WORK_FORMAT.
+  .action((options: { status?: string; priority?: string; label?: string }) => {
+    const w = newWriter(taskList);
+    let db: dbOps.Database;
     try {
-      const db = dbOps.loadDb();
-      const cfg = dbOps.loadConfig();
+      db = dbOps.loadDb();
+    } catch (err) {
+      w.writeError(newToolError(errMessage(err)));
+      return;
+    }
 
-      let outputFmt = options.output;
-      if (outputFmt === "table" && cfg && cfg.default_output) {
-        outputFmt = cfg.default_output;
-      }
+    let filtered = db.tasks;
+    if (options.status) {
+      filtered = filtered.filter((t) => t.status.toLowerCase() === options.status?.toLowerCase());
+    }
+    if (options.priority) {
+      filtered = filtered.filter((t) => t.priority.toLowerCase() === options.priority?.toLowerCase());
+    }
+    if (options.label) {
+      filtered = filtered.filter((t) => t.labels.some((l) => l.toLowerCase() === options.label?.toLowerCase()));
+    }
 
-      let filtered = db.tasks;
-      if (options.status) {
-        filtered = filtered.filter((t) => t.status.toLowerCase() === options.status.toLowerCase());
-      }
-      if (options.priority) {
-        filtered = filtered.filter((t) => t.priority.toLowerCase() === options.priority.toLowerCase());
-      }
-      if (options.label) {
-        filtered = filtered.filter((t) => t.labels.some((l) => l.toLowerCase() === options.label.toLowerCase()));
-      }
+    // Agent / piped: structured JSON envelope (the result is the task array).
+    if (!w.isTTY()) {
+      w.writeSuccess("List of sprint tasks", filtered);
+      return;
+    }
 
-      switch (outputFmt.toLowerCase()) {
-        case "json":
-          formatOps.printTasksJSON(filtered);
-          break;
-        case "csv":
-          formatOps.printTasksCSV(filtered);
-          break;
-        default:
-          formatOps.printTasksTable(filtered);
-          break;
+    // Human TTY: render the content format the user (or config) asked for.
+    let fmt = process.env.MURLI_WORK_FORMAT ?? "table";
+    if (fmt === "table") {
+      try {
+        const cfg = dbOps.loadConfig();
+        if (cfg?.default_output) fmt = cfg.default_output;
+      } catch {
+        // fall back to the table default
       }
-    } catch (err: any) {
-      console.error(`Error: ${err.message}`);
-      process.exit(1);
+    }
+    switch (fmt.toLowerCase()) {
+      case "json":
+        formatOps.printTasksJSON(filtered);
+        break;
+      case "csv":
+        formatOps.printTasksCSV(filtered);
+        break;
+      default:
+        formatOps.printTasksTable(filtered);
+        break;
     }
   });
+annotate(taskList, {
+  idempotent: true,
+  agentDescription: "List stored sprint tasks with optional status/priority/label filters.",
+  flagAnnotations: {
+    status: { enum: ["todo", "doing", "done"] },
+    priority: { enum: ["low", "medium", "high"] },
+  },
+});
 
-taskCmd
+const taskUpdate = taskCmd
   .command("update <id>")
   .description("Update an existing task's fields")
   .option("-t, --title <title>", "New title")
@@ -98,118 +177,206 @@ taskCmd
   .option("-p, --priority <priority>", "New priority")
   .option("-s, --status <status>", "New status")
   .option("-l, --labels <labels>", "Replacement labels")
-  .action((idStr, options, cmd) => {
-    try {
-      const id = parseInt(idStr, 10);
-      if (isNaN(id)) {
-        throw new Error(`invalid task ID: ${idStr}`);
+  .action(
+    (
+      idStr: string,
+      options: { title?: string; desc?: string; priority?: string; status?: string; labels?: string },
+    ) => {
+      const w = newWriter(taskUpdate);
+      const id = Number.parseInt(idStr, 10);
+      if (Number.isNaN(id)) {
+        w.writeError(
+          new AgentError({ code: 2, error: "validation_error", message: `invalid task ID: ${idStr}`, recoverable: false }),
+        );
+        return;
       }
-
-      const db = dbOps.loadDb();
-
-      // Check if option was explicitly provided by using command raw checks or options presence
-      const titleVal = cmd.opts().title !== undefined ? options.title : undefined;
-      const descVal = cmd.opts().desc !== undefined ? options.desc : undefined;
-      const priorityVal = cmd.opts().priority !== undefined ? options.priority : undefined;
-      const statusVal = cmd.opts().status !== undefined ? options.status : undefined;
-      
-      let labelsList: string[] | undefined = undefined;
-      if (cmd.opts().labels !== undefined) {
-        labelsList = options.labels ? options.labels.split(",") : [];
+      let db: dbOps.Database;
+      try {
+        db = dbOps.loadDb();
+      } catch (err) {
+        w.writeError(newToolError(errMessage(err)));
+        return;
       }
+      const labelsList = options.labels !== undefined ? options.labels.split(",").filter(Boolean) : undefined;
+      try {
+        dbOps.updateTask(db, id, options.title, options.desc, options.priority, options.status, labelsList);
+        w.writeSuccess(`Task ${id} updated successfully.`, { id });
+      } catch (err) {
+        const msg = errMessage(err);
+        if (msg.includes("not found")) {
+          w.writeError(new AgentError({ code: 1, error: "not_found", message: msg, recoverable: false }));
+        } else if (msg.includes("priority") || msg.includes("status")) {
+          w.writeError(new AgentError({ code: 2, error: "validation_error", message: msg, recoverable: false }));
+        } else {
+          w.writeError(newToolError(msg));
+        }
+      }
+    },
+  );
+annotate(taskUpdate, {
+  mutating: true,
+  agentDescription: "Update fields of an existing task.",
+  flagAnnotations: {
+    priority: { enum: ["low", "medium", "high"] },
+    status: { enum: ["todo", "doing", "done"] },
+  },
+});
 
-      dbOps.updateTask(db, id, titleVal, descVal, priorityVal, statusVal, labelsList);
-      console.log(`Task %d updated successfully.`, id);
-    } catch (err: any) {
-      console.error(`Error: ${err.message}`);
-      process.exit(err.message.includes("not found") ? 1 : (err.message.includes("priority") || err.message.includes("status") ? 2 : 1));
-    }
-  });
-
-taskCmd
+const taskDelete = taskCmd
   .command("delete <id>")
   .description("Delete a task")
-  .option("--force", "Force delete without warning")
-  .action((idStr) => {
+  .action((idStr: string) => {
+    const w = newWriter(taskDelete);
+    const id = Number.parseInt(idStr, 10);
+    if (Number.isNaN(id)) {
+      w.writeError(
+        new AgentError({ code: 2, error: "validation_error", message: `invalid task ID: ${idStr}`, recoverable: false }),
+      );
+      return;
+    }
+    let db: dbOps.Database;
     try {
-      const id = parseInt(idStr, 10);
-      if (isNaN(id)) {
-        throw new Error(`invalid task ID: ${idStr}`);
-      }
-
-      const db = dbOps.loadDb();
+      db = dbOps.loadDb();
+    } catch (err) {
+      w.writeError(newToolError(errMessage(err)));
+      return;
+    }
+    if (w.isDryRun()) {
+      w.writePlan(`Would delete task ${id} (no changes made)`, { would_delete: id });
+      return;
+    }
+    try {
       dbOps.deleteTask(db, id);
-      console.log(`Task %d deleted successfully.`, id);
-    } catch (err: any) {
-      console.error(`Error: ${err.message}`);
-      process.exit(1);
+      w.writeSuccess(`Task ${id} deleted successfully.`, { id });
+    } catch (err) {
+      const msg = errMessage(err);
+      w.writeError(
+        new AgentError({ code: 1, error: msg.includes("not found") ? "not_found" : "tool_error", message: msg, recoverable: false }),
+      );
     }
   });
+annotate(taskDelete, {
+  mutating: true,
+  destructive: true,
+  dryRunnable: true,
+  agentDescription: "Delete a task by ID.",
+});
 
 program.addCommand(taskCmd);
 
-// Label command and its subcommands
+// label group
 const labelCmd = new Command("label").description("Manage global task labels");
 
-labelCmd
+const labelList = labelCmd
   .command("list")
   .description("List all defined labels")
   .action(() => {
+    const w = newWriter(labelList);
+    let db: dbOps.Database;
     try {
-      const db = dbOps.loadDb();
-      formatOps.printLabelsTable(db);
-    } catch (err: any) {
-      console.error(`Error: ${err.message}`);
-      process.exit(1);
+      db = dbOps.loadDb();
+    } catch (err) {
+      w.writeError(newToolError(errMessage(err)));
+      return;
     }
+    if (!w.isTTY()) {
+      const rows = db.labels.map((l) => ({
+        name: l.name,
+        count: db.tasks.filter((t) => t.labels.includes(l.name)).length,
+      }));
+      w.writeSuccess("List of labels", rows);
+      return;
+    }
+    formatOps.printLabelsTable(db);
   });
+annotate(labelList, { idempotent: true, agentDescription: "List labels with their task counts." });
 
-labelCmd
+const labelCreate = labelCmd
   .command("create <name>")
   .description("Create a custom label")
-  .action((name) => {
+  .action((name: string) => {
+    const w = newWriter(labelCreate);
+    let db: dbOps.Database;
     try {
-      const db = dbOps.loadDb();
+      db = dbOps.loadDb();
+    } catch (err) {
+      w.writeError(newToolError(errMessage(err)));
+      return;
+    }
+    try {
       const slug = dbOps.createLabel(db, name);
-      console.log(`Label "%s" created successfully.`, slug);
-    } catch (err: any) {
-      console.error(`Error: ${err.message}`);
-      process.exit(1);
+      w.writeSuccess(`Label "${slug}" created successfully.`, { name: slug });
+    } catch (err) {
+      w.writeError(new AgentError({ code: 1, error: "conflict", message: errMessage(err), recoverable: false }));
     }
   });
+annotate(labelCreate, { mutating: true, agentDescription: "Create a new label." });
 
-labelCmd
+const labelDelete = labelCmd
   .command("delete <name>")
   .description("Delete a label")
-  .action((name) => {
+  .action((name: string) => {
+    const w = newWriter(labelDelete);
+    let db: dbOps.Database;
     try {
-      const db = dbOps.loadDb();
+      db = dbOps.loadDb();
+    } catch (err) {
+      w.writeError(newToolError(errMessage(err)));
+      return;
+    }
+    try {
       dbOps.deleteLabel(db, name);
-      console.log(`Label "%s" deleted successfully.`, name);
-    } catch (err: any) {
-      console.error(`Error: ${err.message}`);
-      process.exit(1);
+      w.writeSuccess(`Label "${name}" deleted successfully.`, { name });
+    } catch (err) {
+      const msg = errMessage(err);
+      w.writeError(
+        new AgentError({ code: 1, error: msg.includes("not found") ? "not_found" : "tool_error", message: msg, recoverable: false }),
+      );
     }
   });
+annotate(labelDelete, { mutating: true, destructive: true, agentDescription: "Delete a label." });
 
 program.addCommand(labelCmd);
 
-// Report command
-program
+// report
+const reportCmd = program
   .command("report")
   .description("Display progress report")
   .action(() => {
+    const w = newWriter(reportCmd);
+    let db: dbOps.Database;
     try {
-      const db = dbOps.loadDb();
-      formatOps.printSprintReport(db);
-    } catch (err: any) {
-      console.error(`Error: ${err.message}`);
-      process.exit(1);
+      db = dbOps.loadDb();
+    } catch (err) {
+      w.writeError(newToolError(errMessage(err)));
+      return;
     }
+    if (!w.isTTY()) {
+      const statusBreakdown = { todo: 0, doing: 0, done: 0 };
+      const priorityBreakdown = { high: 0, medium: 0, low: 0 };
+      let completed = 0;
+      for (const t of db.tasks) {
+        statusBreakdown[t.status] += 1;
+        priorityBreakdown[t.priority] += 1;
+        if (t.status === "done") completed += 1;
+      }
+      const total = db.tasks.length;
+      w.writeSuccess("Sprint progress report", {
+        total_tasks: total,
+        completed_tasks: completed,
+        percent_complete: total > 0 ? (completed * 100) / total : 0,
+        status_breakdown: statusBreakdown,
+        priority_breakdown: priorityBreakdown,
+      });
+      return;
+    }
+    formatOps.printSprintReport(db);
   });
+annotate(reportCmd, {
+  idempotent: true,
+  agentDescription: "Summarize sprint task completion and status/priority breakdowns.",
+});
 
-try {
-  program.parse(process.argv);
-} catch (err) {
-  process.exit(2);
-}
+// Replaces `program.parse(process.argv)`. murli wires dual-audience output,
+// describe/--schema introspection, the mutation guard, and structured errors.
+run(program, process.argv);

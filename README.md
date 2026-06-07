@@ -28,6 +28,7 @@ To keep the repository clean and allow developers to compare the "before" and "a
 | [`python/click`](../../tree/python/click) | Python | click | `PYTHON-CLICK-GUIDE.md` |
 | [`python/typer`](../../tree/python/typer) | Python | typer | `PYTHON-TYPER-GUIDE.md` |
 | [`python/argparse`](../../tree/python/argparse) | Python | argparse | `PYTHON-ARGPARSE-GUIDE.md` |
+| [`typescript/commander`](../../tree/typescript/commander) | TypeScript | commander | `TYPESCRIPT-COMMANDER-GUIDE.md` |
 
 ---
 
@@ -145,7 +146,7 @@ Each template represents a benchmark for applying Murli. Below is the matrix of 
 | **Python** | `click` | `json` (stdlib) | `tabulate` | Wrapped via `murli[click]` — see [`python/click`](../../tree/python/click). |
 | **Python** | `typer` | `json` (stdlib) | `rich` (or `tabulate`) | Wrapped via `murli[typer]` — see [`python/typer`](../../tree/python/typer). |
 | **Python** | `argparse` | `json` (stdlib) | manual / `tabulate` | Wrapped via `murli` core — see [`python/argparse`](../../tree/python/argparse). |
-| **TypeScript**| `commander` | `JSON` (stdlib) | `cli-table3` | Target for future TypeScript-native Murli adapters. |
+| **TypeScript**| `commander` | `JSON` (stdlib) | `cli-table3` | Wrapped via `@murli-cli/commander` — see [`typescript/commander`](../../tree/typescript/commander). |
 | **TypeScript**| `yargs` | `JSON` (stdlib) | `cli-table3` | Target for fluent TS-native Murli adapters. |
 | **TypeScript**| `oclif` | `JSON` (stdlib) | `@oclif/table` | Multi-command directory framework integration. |
 | **Zig**        | `zig-clap` | `std.json` (stdlib)| Manual formatting | Native stateless implementation under Zig 0.16.0. |

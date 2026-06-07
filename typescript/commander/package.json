@@ -1,18 +1,23 @@
 {
   "name": "work-commander",
   "version": "0.1.0",
-  "description": "work CLI using commander",
+  "description": "murli-work CLI using commander, wrapped with murli (@murli-cli/commander)",
   "main": "dist/index.js",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "commander": "^11.0.0",
-    "cli-table3": "^0.6.3"
+    "@murli-cli/commander": "file:vendor/murli-cli-commander-0.1.0.tgz",
+    "@murli-cli/core": "file:vendor/murli-cli-core-0.1.0.tgz",
+    "cli-table3": "^0.6.3",
+    "commander": "^12.1.0"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
   }
 }
