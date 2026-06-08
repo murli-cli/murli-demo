@@ -54,6 +54,35 @@ function classifyDbError(err: unknown): AgentError {
   return newToolError(message);
 }
 
+// Load the database or emit a structured tool error and signal the caller to bail.
+// The TS-idiomatic equivalent of the reference demo's repeated `if err != nil` guard.
+function loadOrFail(w: ReturnType<typeof newWriter>): dbOps.Database | undefined {
+  try {
+    return dbOps.loadDb();
+  } catch (err) {
+    w.writeError(newToolError(errMessage(err)));
+    return undefined;
+  }
+}
+
+// Resolve the positional id and database for the id-taking commands (update, delete),
+// or emit the matching error and signal the caller to bail.
+function resolveIdAndDb(
+  w: ReturnType<typeof newWriter>,
+  idStr: string,
+): { id: number; db: dbOps.Database } | undefined {
+  const id = Number.parseInt(idStr, 10);
+  if (Number.isNaN(id)) {
+    w.writeError(
+      new AgentError({ code: 2, error: "validation_error", message: `invalid task ID: ${idStr}`, recoverable: false }),
+    );
+    return undefined;
+  }
+  const db = loadOrFail(w);
+  if (!db) return undefined;
+  return { id, db };
+}
+
 preprocessOutputFormat(process.argv);
 
 const program = new Command();
@@ -93,13 +122,8 @@ const taskCreate = taskCmd
   .option("-l, --labels <labels>", "Comma-separated labels")
   .action((title: string, options: { desc: string; priority?: string; labels?: string }) => {
     const w = newWriter(taskCreate);
-    let db: dbOps.Database;
-    try {
-      db = dbOps.loadDb();
-    } catch (err) {
-      w.writeError(newToolError(errMessage(err)));
-      return;
-    }
+    const db = loadOrFail(w);
+    if (!db) return;
     const labelsList = options.labels ? options.labels.split(",") : [];
     try {
       const id = dbOps.createTask(db, title, options.desc, options.priority, labelsList);
@@ -125,13 +149,8 @@ const taskList = taskCmd
   // human content format (table|csv|json) is recovered from MURLI_WORK_FORMAT.
   .action((options: { status?: string; priority?: string; label?: string }) => {
     const w = newWriter(taskList);
-    let db: dbOps.Database;
-    try {
-      db = dbOps.loadDb();
-    } catch (err) {
-      w.writeError(newToolError(errMessage(err)));
-      return;
-    }
+    const db = loadOrFail(w);
+    if (!db) return;
 
     let filtered = db.tasks;
     if (options.status) {
@@ -195,20 +214,9 @@ const taskUpdate = taskCmd
       options: { title?: string; desc?: string; priority?: string; status?: string; labels?: string },
     ) => {
       const w = newWriter(taskUpdate);
-      const id = Number.parseInt(idStr, 10);
-      if (Number.isNaN(id)) {
-        w.writeError(
-          new AgentError({ code: 2, error: "validation_error", message: `invalid task ID: ${idStr}`, recoverable: false }),
-        );
-        return;
-      }
-      let db: dbOps.Database;
-      try {
-        db = dbOps.loadDb();
-      } catch (err) {
-        w.writeError(newToolError(errMessage(err)));
-        return;
-      }
+      const resolved = resolveIdAndDb(w, idStr);
+      if (!resolved) return;
+      const { id, db } = resolved;
       const labelsList = options.labels !== undefined ? options.labels.split(",").filter(Boolean) : undefined;
       try {
         dbOps.updateTask(db, id, options.title, options.desc, options.priority, options.status, labelsList);
@@ -233,20 +241,9 @@ const taskDelete = taskCmd
   .description("Delete a task")
   .action((idStr: string) => {
     const w = newWriter(taskDelete);
-    const id = Number.parseInt(idStr, 10);
-    if (Number.isNaN(id)) {
-      w.writeError(
-        new AgentError({ code: 2, error: "validation_error", message: `invalid task ID: ${idStr}`, recoverable: false }),
-      );
-      return;
-    }
-    let db: dbOps.Database;
-    try {
-      db = dbOps.loadDb();
-    } catch (err) {
-      w.writeError(newToolError(errMessage(err)));
-      return;
-    }
+    const resolved = resolveIdAndDb(w, idStr);
+    if (!resolved) return;
+    const { id, db } = resolved;
     if (w.isDryRun()) {
       w.writePlan(`Would delete task ${id} (no changes made)`, { would_delete: id });
       return;
@@ -276,13 +273,8 @@ const labelList = labelCmd
   .description("List all defined labels")
   .action(() => {
     const w = newWriter(labelList);
-    let db: dbOps.Database;
-    try {
-      db = dbOps.loadDb();
-    } catch (err) {
-      w.writeError(newToolError(errMessage(err)));
-      return;
-    }
+    const db = loadOrFail(w);
+    if (!db) return;
     if (!w.isTTY()) {
       const rows = db.labels.map((l) => ({
         name: l.name,
@@ -300,13 +292,8 @@ const labelCreate = labelCmd
   .description("Create a custom label")
   .action((name: string) => {
     const w = newWriter(labelCreate);
-    let db: dbOps.Database;
-    try {
-      db = dbOps.loadDb();
-    } catch (err) {
-      w.writeError(newToolError(errMessage(err)));
-      return;
-    }
+    const db = loadOrFail(w);
+    if (!db) return;
     try {
       const slug = dbOps.createLabel(db, name);
       w.writeSuccess(`Label "${slug}" created successfully.`, { label: slug });
@@ -325,13 +312,8 @@ const labelDelete = labelCmd
   .description("Delete a label")
   .action((name: string) => {
     const w = newWriter(labelDelete);
-    let db: dbOps.Database;
-    try {
-      db = dbOps.loadDb();
-    } catch (err) {
-      w.writeError(newToolError(errMessage(err)));
-      return;
-    }
+    const db = loadOrFail(w);
+    if (!db) return;
     try {
       dbOps.deleteLabel(db, name);
       w.writeSuccess(`Label "${name}" deleted successfully.`, { label: name });
@@ -354,13 +336,8 @@ const reportCmd = program
   .description("Display progress report")
   .action(() => {
     const w = newWriter(reportCmd);
-    let db: dbOps.Database;
-    try {
-      db = dbOps.loadDb();
-    } catch (err) {
-      w.writeError(newToolError(errMessage(err)));
-      return;
-    }
+    const db = loadOrFail(w);
+    if (!db) return;
     if (!w.isTTY()) {
       const statusBreakdown = { todo: 0, doing: 0, done: 0 };
       const priorityBreakdown = { high: 0, medium: 0, low: 0 };
