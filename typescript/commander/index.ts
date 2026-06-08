@@ -40,6 +40,20 @@ function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+// The shared db layer throws plain Error with human messages, so this is the single
+// place that maps those messages onto murli's structured error taxonomy. Centralizing
+// it keeps the exit-code/error-type choices consistent across every mutation handler.
+function classifyDbError(err: unknown): AgentError {
+  const message = errMessage(err);
+  if (message.includes("not found")) {
+    return new AgentError({ code: 1, error: "not_found", message, recoverable: false });
+  }
+  if (message.includes("priority") || message.includes("status")) {
+    return new AgentError({ code: 2, error: "validation_error", message, recoverable: false });
+  }
+  return newToolError(message);
+}
+
 preprocessOutputFormat(process.argv);
 
 const program = new Command();
@@ -63,6 +77,7 @@ const initCmd = program
     }
   });
 annotate(initCmd, {
+  idempotent: true,
   mutating: true,
   agentDescription: "Initialize or reset the murli-work database with sample data.",
 });
@@ -90,10 +105,7 @@ const taskCreate = taskCmd
       const id = dbOps.createTask(db, title, options.desc, options.priority, labelsList);
       w.writeSuccess(`Task ${id} ("${title}") created successfully.`, { id, title });
     } catch (err) {
-      // Invalid enum (priority) — argument/validation error, exit code 2 per spec.
-      w.writeError(
-        new AgentError({ code: 2, error: "validation_error", message: errMessage(err), recoverable: false }),
-      );
+      w.writeError(classifyDbError(err));
     }
   });
 annotate(taskCreate, {
@@ -202,20 +214,14 @@ const taskUpdate = taskCmd
         dbOps.updateTask(db, id, options.title, options.desc, options.priority, options.status, labelsList);
         w.writeSuccess(`Task ${id} updated successfully.`, { id });
       } catch (err) {
-        const msg = errMessage(err);
-        if (msg.includes("not found")) {
-          w.writeError(new AgentError({ code: 1, error: "not_found", message: msg, recoverable: false }));
-        } else if (msg.includes("priority") || msg.includes("status")) {
-          w.writeError(new AgentError({ code: 2, error: "validation_error", message: msg, recoverable: false }));
-        } else {
-          w.writeError(newToolError(msg));
-        }
+        w.writeError(classifyDbError(err));
       }
     },
   );
 annotate(taskUpdate, {
   mutating: true,
   agentDescription: "Update fields of an existing task.",
+  arguments: [{ name: "id", type: "integer", required: true, description: "ID of task to update" }],
   flagAnnotations: {
     priority: { enum: ["low", "medium", "high"] },
     status: { enum: ["todo", "doing", "done"] },
@@ -249,10 +255,7 @@ const taskDelete = taskCmd
       dbOps.deleteTask(db, id);
       w.writeSuccess(`Task ${id} deleted successfully.`, { id });
     } catch (err) {
-      const msg = errMessage(err);
-      w.writeError(
-        new AgentError({ code: 1, error: msg.includes("not found") ? "not_found" : "tool_error", message: msg, recoverable: false }),
-      );
+      w.writeError(classifyDbError(err));
     }
   });
 annotate(taskDelete, {
@@ -260,6 +263,7 @@ annotate(taskDelete, {
   destructive: true,
   dryRunnable: true,
   agentDescription: "Delete a task by ID.",
+  arguments: [{ name: "id", type: "integer", required: true, description: "ID of task to delete" }],
 });
 
 program.addCommand(taskCmd);
@@ -305,12 +309,16 @@ const labelCreate = labelCmd
     }
     try {
       const slug = dbOps.createLabel(db, name);
-      w.writeSuccess(`Label "${slug}" created successfully.`, { name: slug });
+      w.writeSuccess(`Label "${slug}" created successfully.`, { label: slug });
     } catch (err) {
       w.writeError(new AgentError({ code: 1, error: "conflict", message: errMessage(err), recoverable: false }));
     }
   });
-annotate(labelCreate, { mutating: true, agentDescription: "Create a new label." });
+annotate(labelCreate, {
+  mutating: true,
+  agentDescription: "Create a new label.",
+  arguments: [{ name: "name", type: "string", required: true, description: "Label name" }],
+});
 
 const labelDelete = labelCmd
   .command("delete <name>")
@@ -326,15 +334,17 @@ const labelDelete = labelCmd
     }
     try {
       dbOps.deleteLabel(db, name);
-      w.writeSuccess(`Label "${name}" deleted successfully.`, { name });
+      w.writeSuccess(`Label "${name}" deleted successfully.`, { label: name });
     } catch (err) {
-      const msg = errMessage(err);
-      w.writeError(
-        new AgentError({ code: 1, error: msg.includes("not found") ? "not_found" : "tool_error", message: msg, recoverable: false }),
-      );
+      w.writeError(classifyDbError(err));
     }
   });
-annotate(labelDelete, { mutating: true, destructive: true, agentDescription: "Delete a label." });
+annotate(labelDelete, {
+  mutating: true,
+  destructive: true,
+  agentDescription: "Delete a label.",
+  arguments: [{ name: "name", type: "string", required: true, description: "Label name to delete" }],
+});
 
 program.addCommand(labelCmd);
 
